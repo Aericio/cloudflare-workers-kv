@@ -6,6 +6,12 @@ const throwError = ({ message, code }) => {
   throw error;
 };
 
+const handleResponse = async (res) => {
+  const { success, result, errors } = await res.json();
+  if (!success) throwError(errors[0]);
+  return result ?? success;
+};
+
 export default function CloudflareKV({ accountId, token, namespaceId }) {
   const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}`;
   const keyUrl = (key = "") => `${baseUrl}/values/${key}`;
@@ -25,40 +31,31 @@ export default function CloudflareKV({ accountId, token, namespaceId }) {
     return response.json();
   };
 
-  const listAll = async (limit, cursor = "", prefix = "", opts) => {
+  const listAll = async (limit = "", cursor = "", prefix = "", opts) => {
     const searchParams = new URLSearchParams({ limit, cursor, prefix });
-    const { result, errors } = await fetch(
-      `${baseUrl}/keys?${searchParams.toString()}`,
-      fetchOptions(opts)
-    ).then((res) => res.json());
-    return result || throwError(errors[0]);
+    return await fetch(`${baseUrl}/keys?${searchParams.toString()}`, fetchOptions(opts)).then(
+      handleResponse
+    );
   };
 
   const set = async (key, value, ttl = "", opts) => {
     const searchParams = new URLSearchParams({ expiration_ttl: `${ttl / 1000}` });
 
-    console.log(`${keyUrl(key)}?${searchParams.toString()}`);
-    const { success, errors } = await fetch(
+    return await fetch(
       `${keyUrl(key)}?${searchParams.toString()}`,
       fetchOptions(opts, {
         body: typeof value === "string" ? value : JSON.stringify(value),
         method: "PUT",
       })
-    ).then((res) => res.json());
-
-    return success || throwError(errors[0]);
+    ).then(handleResponse);
   };
 
   const _delete = async (key, opts) => {
-    const { success, errors } = await fetch(
-      keyUrl(key),
-      fetchOptions(opts, { method: "DELETE" })
-    ).then((res) => res.json());
-    return success || throwError(errors[0]);
+    return await fetch(keyUrl(key), fetchOptions(opts, { method: "DELETE" })).then(handleResponse);
   };
 
   const bulkDelete = async (keys, opts) => {
-    const { success, errors } = await fetch(
+    return await fetch(
       `${baseUrl}/bulk`,
       fetchOptions(
         {
@@ -72,8 +69,7 @@ export default function CloudflareKV({ accountId, token, namespaceId }) {
           method: "DELETE",
         }
       )
-    ).then((res) => res.json());
-    return success || throwError(errors[0]);
+    ).then(handleResponse);
   };
 
   return { get, listAll, set, delete: _delete, bulkDelete };
