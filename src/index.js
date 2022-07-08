@@ -1,67 +1,66 @@
-'use strict'
-
-const fetch = require('isomorphic-unfetch')
+import fetch from "isomorphic-unfetch";
 
 const throwError = ({ message, code }) => {
-  const error = new Error(`${message}`)
-  error.code = code
-  throw error
-}
+  const error = new Error(`${message}`);
+  error.code = code;
+  throw error;
+};
 
-const authentication = ({ email, key }) =>
-  email
-    ? { 'X-Auth-Email': email, 'X-Auth-Key': key }
-    : { Authorization: `Bearer ${key}` }
-
-function CloudFlareWorkersKV (options) {
-  if (!(this instanceof CloudFlareWorkersKV)) {
-    return new CloudFlareWorkersKV(options)
-  }
-
-  const { accountId, email, key, namespaceId } = options
-  const auth = authentication({ email, key })
-
-  const baseUrl = (key = '') =>
-    `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}/values/${key}`
+export default function CloudflareKV({ accountId, key, namespaceId }) {
+  const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${namespaceId}`;
+  const keyUrl = (key = "") => `${baseUrl}/values/${key}`;
 
   const fetchOptions = (opts = {}, props) => ({
     ...opts,
     headers: {
       ...opts.headers,
-      ...auth
+      Authorization: `Bearer ${key}`,
     },
-    ...props
-  })
+    ...props,
+  });
 
   const get = async (key, opts) => {
-    const response = await fetch(baseUrl(key), fetchOptions(opts))
-    if (response.status === 404) return undefined
-    return response.json()
-  }
+    const response = await fetch(keyUrl(key), fetchOptions(opts));
+    if (response.status === 404) return undefined;
+    return response.json();
+  };
 
-  const set = async (key, value, ttl, opts = {}) => {
-    const url = baseUrl(key)
-    const searchParams = new URLSearchParams(
-      ttl ? { expiration_ttl: ttl / 1000 } : {}
-    )
+  const listAll = async (limit, cursor, prefix, opts) => {
+    const searchParams = new URLSearchParams({ limit, cursor, prefix });
+    const response = await fetch(`${baseUrl}/keys?${searchParams.toString()}`, fetchOptions(opts));
+    if (response.status === 404) return undefined;
+    return response.json();
+  };
+
+  const set = async (key, value, ttl, opts) => {
+    const searchParams = new URLSearchParams(ttl ? { expiration_ttl: ttl } : {});
 
     const { success, errors } = await fetch(
-      `${url}?${searchParams.toString()}`,
+      `${keyUrl(key)}?${searchParams.toString()}`,
       fetchOptions(opts, {
-        body: typeof value === 'string' ? value : JSON.stringify(value),
-        method: 'PUT'
+        body: typeof value === "string" ? value : JSON.stringify(value),
+        method: "PUT",
       })
-    ).then(res => res.json())
+    ).then((res) => res.json());
 
-    return success || throwError(errors[0])
-  }
+    return success || throwError(errors[0]);
+  };
 
   const _delete = async (key, opts) => {
-    await fetch(baseUrl(key), fetchOptions(opts, { method: 'DELETE' }))
-    return true
-  }
+    const { success, errors } = await fetch(keyUrl(key), fetchOptions(opts, { method: "DELETE" }));
+    return success || throwError(errors[0]);
+  };
 
-  return { get, set, delete: _delete }
+  const bulkDelete = async (keys, opts) => {
+    const { success, errors } = await fetch(
+      `${baseUrl}/bulk`,
+      fetchOptions(opts, {
+        body: typeof keys === "string" ? keys : JSON.stringify(keys),
+        method: "DELETE",
+      })
+    );
+    return success || throwError(errors[0]);
+  };
+
+  return { get, listAll, set, delete: _delete, bulkDelete };
 }
-
-module.exports = CloudFlareWorkersKV

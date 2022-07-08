@@ -2,6 +2,7 @@
   "name": "@kikobeats/cloudflare-workers-kv",
   "description": "CloudFlare Workers KV storage adapter for Keyv",
   "version": "1.0.11",
+  "type": "module",
   "main": "src/index.js",
   "author": {
     "email": "josefrancisco.verdu@gmail.com",
