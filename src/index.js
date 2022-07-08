@@ -35,8 +35,9 @@ export default function CloudflareKV({ accountId, token, namespaceId }) {
   };
 
   const set = async (key, value, ttl = "", opts) => {
-    const searchParams = new URLSearchParams({ expiration_ttl: ttl });
+    const searchParams = new URLSearchParams({ expiration_ttl: `${ttl / 1000}` });
 
+    console.log(`${keyUrl(key)}?${searchParams.toString()}`);
     const { success, errors } = await fetch(
       `${keyUrl(key)}?${searchParams.toString()}`,
       fetchOptions(opts, {
